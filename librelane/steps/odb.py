@@ -1155,41 +1155,48 @@ class InsertECODiodes(OdbpyStep):
         return super().run(state_in, **kwargs)
 
 @Step.factory.register()
-class GridMacroAutoplacer(OdbpyStep):
+class MacroGridAutoplacer(OdbpyStep):
     """
-    This step is capable of placing a number of fixed-size macros, e.g. SRAMs, in a grid pattern.
+    This step is capable of placing a number of fixed-size macros in a grid pattern. It removes a lot of
+    repetitive manual labour, and is typically useful for SRAMs, FPGA tiles, and other repetitive patterns.
+
+    To use this step, a macro must be attached to a grid using the **grid_autoplace_attach** macro attribute.
+    For example:
+
+    .. code-block:: yaml
+
+      gf180mcu_fd_ip_sram__sram512x8m8wm1:
+        gds:
+          - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/gds/gf180mcu_fd_ip_sram__sram512x8m8wm1.gds
+        lef:
+          - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/lef/gf180mcu_fd_ip_sram__sram512x8m8wm1.lef
+        vh:
+          - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/verilog/gf180mcu_fd_ip_sram__sram512x8m8wm1__blackbox.v
+        lib:
+          - # removed for brevity
+        grid_autoplace_attach: sram_grid
+        instances:
+            ram1:
+            ram2:
+            ram3:
+
+    In the above example, the three instances of GF180MCU SRAM will be attached to a macro grid named
+    "sram_grid", which must be declared later. The grid itself can be declared like so:
+
+    .. code-block:: yaml
+
+      AUTOPLACER_MACRO_GRIDS:
+          sram_grid:
+
     """
 
-    id = "Odb.GridMacroAutoplacer"
-    name = "Grid Macro Autoplacer"
+    id = "Odb.MacroGridAutoplacer"
+    name = "Macro Grid Autoplacer"
+
+    # FIXME maybe we should attach to grids directly, like the grid itself is declared in the config YAML
 
     config_vars = (
          [
-            # Variable(
-            #     "GRID_COORD_BL",
-            #     Tuple[int, int],
-            #     "Coordinates (X, Y) of grid bottom-left corner.",
-            #     units="µm",
-            # ),
-            # Variable(
-            #     "GRID_SIZE",
-            #     Tuple[int, int],
-            #     "Dimensions of grid (width X height).",
-            #     units="µm",
-            # ),
-            # Variable(
-            #     "GRID_INST_PAD_X",
-            #     int,
-            #     "Padding between individual grid instances on the X axis.",
-            #     units="µm",
-            # ),
-            # Variable(
-            #     "GRID_INST_PAD_Y",
-            #     int,
-            #     "Padding between grid rows (on the Y axis).",
-            #     units="µm",
-            # ),
-
             Variable(
                 "AUTOPLACER_MACRO_GRIDS",
                 List[MacroGrid],
@@ -1199,6 +1206,9 @@ class GridMacroAutoplacer(OdbpyStep):
     )
 
     def __locate_grid_assigned_macro_instances(self) -> List[Tuple[str, Macro]]:
+        """
+        Locates macros that are attached to autoplace grids.
+        """
         out = []
         for macro_name, macro in self.config["MACROS"]:
             if macro.grid_autoplace_attach is not None:
