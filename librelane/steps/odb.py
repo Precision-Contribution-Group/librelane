@@ -25,6 +25,8 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Dict, List, Literal, Optional, Tuple
 
+from librelane.config.variable import MacroGrid
+
 from ..common import Path, get_script_dir, aggregate_metrics
 from ..config import Instance, Macro, Variable
 from ..logging import info, verbose
@@ -1150,4 +1152,78 @@ class InsertECODiodes(OdbpyStep):
         if self.config["INSERT_ECO_DIODES"] is None:
             info(f"'INSERT_ECO_DIODES' not set. Skipping '{self.id}'…")
             return {}, {}
+        return super().run(state_in, **kwargs)
+
+@Step.factory.register()
+class GridMacroAutoplacer(OdbpyStep):
+    """
+    This step is capable of placing a number of fixed-size macros, e.g. SRAMs, in a grid pattern.
+    """
+
+    id = "Odb.GridMacroAutoplacer"
+    name = "Grid Macro Autoplacer"
+
+    config_vars = (
+         [
+            # Variable(
+            #     "GRID_COORD_BL",
+            #     Tuple[int, int],
+            #     "Coordinates (X, Y) of grid bottom-left corner.",
+            #     units="µm",
+            # ),
+            # Variable(
+            #     "GRID_SIZE",
+            #     Tuple[int, int],
+            #     "Dimensions of grid (width X height).",
+            #     units="µm",
+            # ),
+            # Variable(
+            #     "GRID_INST_PAD_X",
+            #     int,
+            #     "Padding between individual grid instances on the X axis.",
+            #     units="µm",
+            # ),
+            # Variable(
+            #     "GRID_INST_PAD_Y",
+            #     int,
+            #     "Padding between grid rows (on the Y axis).",
+            #     units="µm",
+            # ),
+
+            Variable(
+                "AUTOPLACER_MACRO_GRIDS",
+                List[MacroGrid],
+                "List of macro grids",
+            )
+        ]
+    )
+
+    def __locate_grid_assigned_macro_instances(self) -> List[Tuple[str, Macro]]:
+        out = []
+        for macro_name, macro in self.config["MACROS"]:
+            if macro.grid_autoplace_attach is not None:
+                out.append((macro_name, macro))
+        return out
+
+    def get_script_path(self):
+        return os.path.join(get_script_dir(), "odbpy", "grid_autoplacer.py")
+
+    def get_command(self) -> List[str]:
+        assert self.config_path is not None, "get_command called before start()"
+        return super().get_command() + ["--step-config", self.config_path]
+
+    def run(self, state_in: State, **kwargs):
+        if self.config["MACROS"] is None:
+            info(f"No macros defined. Skipping '{self.id}'")
+            return {}, {}
+
+        macros = self.__locate_grid_assigned_macro_instances()
+        all_grids: List[MacroGrid] = self.config[self.config_vars[0].name]
+
+        for macro_name, macro in macros:
+            # ensure that the macro references a valid grid name
+            all_grid_names = [x.name for x in all_grids]
+            if not macro.grid_autoplace_attach in all_grid_names:
+                raise StepException(f"Macro '{macro_name}' refers to unknown macro grid '{macro.grid_autoplace_attach}'")
+
         return super().run(state_in, **kwargs)
