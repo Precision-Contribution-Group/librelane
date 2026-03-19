@@ -54,6 +54,7 @@ class Classic(SequentialFlow):
         OpenROAD.DumpRCValues,
         Odb.CheckMacroAntennaProperties,
         Odb.SetPowerConnections,
+        Odb.MacroGridAutoplacer,
         Odb.ManualMacroPlacement,
         OpenROAD.CutRows,
         OpenROAD.TapEndcapInsertion,

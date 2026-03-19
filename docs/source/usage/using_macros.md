@@ -377,6 +377,40 @@ Linting using LibreLane, `__pnr__` will be defined, thereby using the header for
 the hardened version of the Macro. Additionally, as the power pins have no relevance
 for the RTL, they can simply be left out when PnR is not defined.
 
+## Automatic placing of macros in a grid
+Sometimes, one would like to place a number of macros of the same type in a grid pattern. This is particularly
+useful for SRAM arrays, but can also be useful for other patterns like FPGAs or some types of mixed-signal
+designs.
+
+Manually placing these macros in a grid is quite laborious. Luckily, there is now a step named
+`Odb.MacroGridAutoplacer` that can help you with this.
+
+To use this step, a grid must be declared as part of the macro instance using the **macro_grid** attribute.
+For example:
+
+```yaml
+gf180mcu_fd_ip_sram__sram512x8m8wm1:
+gds:
+  - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/gds/gf180mcu_fd_ip_sram__sram512x8m8wm1.gds
+lef:
+  - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/lef/gf180mcu_fd_ip_sram__sram512x8m8wm1.lef
+vh:
+  - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/verilog/gf180mcu_fd_ip_sram__sram512x8m8wm1__blackbox.v
+lib:
+  - # removed for brevity
+macro_grid:
+    coord_bl: [5, 5]  # Coordinates (X, Y) of grid bottom-left corner in micrometres.
+    size: 100         # Dimensions of grid (width X height) in micrometres.
+    inst_pad_x: 2     # Padding between individual grid instances on the X axis in micrometres.
+    inst_pad_y: 2     # Padding between grid rows (on the Y axis) in micrometres.
+instances:
+    ram1:
+    ram2:
+    ram3:
+```
+
+In the above example, three instances of GF180MCU SRAM will be attached to a macro grid.
+
 ## Misc. Useful Variables
 
 There are some variables used in the Classic that you may want to configure when

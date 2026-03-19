@@ -1159,59 +1159,20 @@ class MacroGridAutoplacer(OdbpyStep):
     """
     This step is capable of placing a number of fixed-size macros in a grid pattern. It removes a lot of
     repetitive manual labour, and is typically useful for SRAMs, FPGA tiles, and other repetitive patterns.
-
-    To use this step, a macro must be attached to a grid using the **grid_autoplace_attach** macro attribute.
-    For example:
-
-    .. code-block:: yaml
-
-      gf180mcu_fd_ip_sram__sram512x8m8wm1:
-        gds:
-          - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/gds/gf180mcu_fd_ip_sram__sram512x8m8wm1.gds
-        lef:
-          - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/lef/gf180mcu_fd_ip_sram__sram512x8m8wm1.lef
-        vh:
-          - pdk_dir::libs.ref/gf180mcu_fd_ip_sram/verilog/gf180mcu_fd_ip_sram__sram512x8m8wm1__blackbox.v
-        lib:
-          - # removed for brevity
-        grid_autoplace_attach: sram_grid
-        instances:
-            ram1:
-            ram2:
-            ram3:
-
-    In the above example, the three instances of GF180MCU SRAM will be attached to a macro grid named
-    "sram_grid", which must be declared later. The grid itself can be declared like so:
-
-    .. code-block:: yaml
-
-      AUTOPLACER_MACRO_GRIDS:
-          sram_grid:
-
     """
 
     id = "Odb.MacroGridAutoplacer"
     name = "Macro Grid Autoplacer"
 
-    # FIXME maybe we should attach to grids directly, like the grid itself is declared in the config YAML
+    config_vars = OdbpyStep.config_vars
 
-    config_vars = (
-         [
-            Variable(
-                "AUTOPLACER_MACRO_GRIDS",
-                List[MacroGrid],
-                "List of macro grids",
-            )
-        ]
-    )
-
-    def __locate_grid_assigned_macro_instances(self) -> List[Tuple[str, Macro]]:
+    def __locate_grid_macros(self) -> List[Tuple[str, Macro]]:
         """
-        Locates macros that are attached to autoplace grids.
+        Locates macros that have autoplace grids.
         """
         out = []
         for macro_name, macro in self.config["MACROS"]:
-            if macro.grid_autoplace_attach is not None:
+            if macro.macro_grid is not None:
                 out.append((macro_name, macro))
         return out
 
@@ -1220,20 +1181,18 @@ class MacroGridAutoplacer(OdbpyStep):
 
     def get_command(self) -> List[str]:
         assert self.config_path is not None, "get_command called before start()"
-        return super().get_command() + ["--step-config", self.config_path]
+        macros = self.__locate_grid_macros()
+        macros_encoded = json.dumps(macros)
+        return super().get_command() + ["--config", macros_encoded]
 
     def run(self, state_in: State, **kwargs):
         if self.config["MACROS"] is None:
             info(f"No macros defined. Skipping '{self.id}'")
             return {}, {}
 
-        macros = self.__locate_grid_assigned_macro_instances()
-        all_grids: List[MacroGrid] = self.config[self.config_vars[0].name]
-
-        for macro_name, macro in macros:
-            # ensure that the macro references a valid grid name
-            all_grid_names = [x.name for x in all_grids]
-            if not macro.grid_autoplace_attach in all_grid_names:
-                raise StepException(f"Macro '{macro_name}' refers to unknown macro grid '{macro.grid_autoplace_attach}'")
+        macros = self.__locate_grid_macros()
+        if len(macros) == 0:
+            info(f"No defined macros have grids associated with them. Skipping '{self.id}'")
+            return {}, {}
 
         return super().run(state_in, **kwargs)
