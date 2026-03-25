@@ -232,6 +232,7 @@ def test_preprocess_invalid_f_list():
             scl="sky130_fd_sc_hd",
         )
 
+
 def test_preprocess_array_macro_with_macro_instances():
     from librelane.config.preprocessor import preprocess_dict
 

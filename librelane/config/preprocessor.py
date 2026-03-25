@@ -474,6 +474,7 @@ def __parse_f_list(
 
     return mut
 
+
 def __coerce_dict(item: Mapping[str, Any] | "DataclassInstance") -> Mapping[str, Any]:
     if dataclasses.is_dataclass(item):
         return dataclasses.asdict(item)
