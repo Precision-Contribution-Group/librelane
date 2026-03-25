@@ -588,7 +588,7 @@ def process_config_dict(
     symbols = dict(exposed_variables)
 
     # parse any *.f files first
-    updated = __parse_f_list(config_in, exposed_variables)
+    updated: Mapping[str, Any] = __parse_f_list(config_in, exposed_variables)
 
     # ensure that we expand macro arrays *first*, such that the macro name template is resolved
     updated = locate_and_expand_macro_arrays(updated, symbols)
