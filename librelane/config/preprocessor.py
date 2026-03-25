@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import dataclasses
 import re
 import os
 import glob
@@ -20,7 +21,14 @@ from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any, Dict, List, Mapping, Sequence, Tuple, Union, Optional
 
+from .variable import Instance, Macro
 from ..common import is_string
+
+# https://stackoverflow.com/a/77145529
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
 
 Keys = SimpleNamespace(
     pdk_root="PDK_ROOT",
@@ -229,6 +237,9 @@ def process_string(
         mutable = value.replace(DIR_PREFIX, f"refg::${Keys.design_dir}/")
     elif value.startswith(PDK_DIR_PREFIX):
         mutable = value.replace(PDK_DIR_PREFIX, f"refg::${Keys.pdkpath}/")
+
+    # before we do anything else, apply inline variable substitution
+    mutable = mutable.format(**symbols)
 
     if mutable.startswith(EXPR_PREFIX):
         try:
@@ -463,6 +474,110 @@ def __parse_f_list(
 
     return mut
 
+def __coerce_dict(item: Mapping[str, Any] | "DataclassInstance") -> Mapping[str, Any]:
+    if dataclasses.is_dataclass(item):
+        return dataclasses.asdict(item)
+    else:
+        return item
+
+
+def expand_macro_array(
+    name_template: str,
+    array: Mapping[str, Any],
+    orientation: str,
+    exposed_variables: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Expands a single macro array.
+
+    Returns a list of macro instantiations.
+    """
+    out: dict[str, Any] = {}
+
+    # prepare this outside the hot loop
+    subs = exposed_variables.copy()
+
+    # initial position
+    x, y = array["offset"]
+    x_init, y_init = array["offset"]
+    x_incr, y_incr = array["step"]
+    seq = 0
+
+    rows, cols = array["dimensions"]
+    for row in range(rows):
+        for col in range(cols):
+            # expand the name template, defining the X and Y variables
+            subs["X"] = col
+            subs["Y"] = row
+            # also support row/col syntax
+            subs["COL"] = col
+            subs["ROW"] = row
+            subs["SEQ"] = seq
+            # we perform a full preprocess on the string, in case the user has declared other variable names
+            # in their macro name, in addition to row/col
+            # we also assume that process_string *should* return a string, but to appease mypy, we coax it
+            # into being a string here as well
+            expanded = str(process_string(name_template, subs))
+            out[expanded] = {"location": [x, y], "orientation": orientation}
+            x += x_incr
+            seq += 1
+        # new row, reset
+        x = x_init
+        y += y_incr
+
+    return out
+
+
+def locate_and_expand_macro_arrays(
+    config_in: Mapping[str, Any],
+    exposed_variables: Dict[str, Any],
+) -> Mapping[str, Any]:
+    """
+    Looks for, and expands, macro arrays.
+
+    Returns the config with macro arrays fully expanded.
+    """
+    out = config_in
+    if (macros := config_in.get("MACROS")) is not None:
+        for macro_name, macro in macros.items():
+            # assume instances must exist
+            # we also need to make a copy here, as we're modifying the dictionary as we iterate
+            for instance_name, instance in (
+                __coerce_dict(macro)["instances"].copy().items()
+            ):
+                if (array := instance.get("array")) is not None:
+                    # check that location has not been manually specified: this conflicts
+                    if instance.get("location"):
+                        raise RuntimeError(
+                            f"Macro instance '{instance_name}' specifies both a manully placed location and an array."
+                        )
+
+                    # perform expansion of this array
+                    orientation = __coerce_dict(instance)["orientation"]
+                    expansions = expand_macro_array(
+                        instance_name,
+                        __coerce_dict(array),
+                        orientation,
+                        exposed_variables,
+                    )
+
+                    # add array elements to the root macro instances
+                    for expansion_name, expansion in expansions.items():
+                        if isinstance(macro, Macro):
+                            macro.instances[expansion_name] = Instance(
+                                location=expansion["location"],
+                                orientation=expansion["orientation"],
+                            )
+                        else:
+                            macro["instances"][expansion_name] = expansion
+
+                    # delete this whole templated instance, since it has now been substituted
+                    if isinstance(macro, Macro):
+                        del macro.instances[instance_name]
+                    else:
+                        del macro["instances"][instance_name]
+    return out
+
 
 def process_config_dict(
     config_in: Mapping[str, Any],
@@ -474,9 +589,10 @@ def process_config_dict(
     # parse any *.f files first
     updated = __parse_f_list(config_in, exposed_variables)
 
-    # proceed as normal
-    process_dict_recursive(updated, state, symbols)
+    # ensure that we expand macro arrays *first*, such that the macro name template is resolved
+    updated = locate_and_expand_macro_arrays(updated, symbols)
 
+    process_dict_recursive(updated, state, symbols)
     return state
 
 

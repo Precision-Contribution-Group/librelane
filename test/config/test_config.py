@@ -185,9 +185,9 @@ def test_tcl_config():
                 /cwd/src/a.v\\
                 /cwd/src/b.v\\
             "
-                    
+
             set ::env(RANDOM_ARRAY) ""
-            
+
             # cant test glob because of the mock filesystem
             """
         )
@@ -728,3 +728,64 @@ def test_dis_migration(caplog: pytest.LogCaptureFixture):
         "See 'Migrating DIODE_INSERTION_STRATEGY'" in caplog.text
     ), "diode insertion strategy did not trigger a warning"
     caplog.clear()
+
+
+@pytest.mark.usefixtures("_mock_conf_fs")
+@mock_variables()
+def test_config_inline_var_substitution():
+    from librelane.config import Meta, Config
+
+    with open("/cwd/config.yaml", "w") as f:
+        f.write(
+            """
+            DESIGN_NAME: whatever
+            VERILOG_FILES:
+                - "src2/{DESIGN_NAME}_top.v"
+                - "dir::src2/{DESIGN_NAME}_top.v"
+                - dir::src/*.v
+            meta:
+                version: 2
+                flow: Whatever
+            """
+        )
+
+    cfg, _ = Config.load(
+        "/cwd/config.yaml",
+        config.flow_common_variables,
+        pdk="dummy",
+        scl="dummy_scl",
+        pdk_root="/pdk",
+    )
+
+    assert cfg == Config(
+        {
+            "DESIGN_DIR": "/cwd",
+            "DESIGN_NAME": "whatever",
+            "PDK_ROOT": "/pdk",
+            "PDK": "dummy",
+            "STD_CELL_LIBRARY": "dummy_scl",
+            "VERILOG_FILES": [
+                "src2/whatever_top.v",
+                "/cwd/src2/whatever_top.v",
+                "/cwd/src/a.v",
+                "/cwd/src/b.v",
+            ],
+            "EXAMPLE_PDK_VAR": Decimal("10"),
+            "GRT_REPAIR_ANTENNAS": True,
+            "RUN_HEURISTIC_DIODE_INSERTION": False,
+            "DIODE_ON_PORTS": "none",
+            "MACROS": None,
+            "TECH_LEFS": {
+                "nom_*": Path(
+                    "/pdk/dummy/libs.ref/techlef/dummy_scl/dummy_tech_lef.tlef"
+                )
+            },
+            "DEFAULT_CORNER": "nom_tt_025C_1v80",
+            "RANDOM_ARRAY": None,
+        },
+        meta=Meta(version=2, flow="Whatever"),
+    ), "Generated configuration does not match expected value"
+
+    assert Config.get_meta("/cwd/config.yaml", flow_override="OtherWhatever") == Meta(
+        version=2, flow="OtherWhatever"
+    ), "get_meta test failed"

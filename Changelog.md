@@ -120,15 +120,15 @@ Style Notes
   * Added `MAGIC_GDS_MERGE` to merge tiles into polygons during gds write (Default: True).
 
   * Set `MAGIC_DEF_LABELS` to False by default.
-  
+
   * Simplified get_bbox and make it more robust
 
 * `Magic.SpiceExtraction`:
 
   * Added `MAGIC_EXT_UNIQUE` to replace `MAGIC_NO_EXT_UNIQUE`
-  
+
     * Allowed values are: "all", "notopports", "noports", "none"
-  
+
   * Load `CELL_SPICE_MODELS` to annotate stdcell port order
 
 * `Odb.*`
@@ -556,6 +556,13 @@ Style Notes
     and the config directory.
 
   * Add support for parsing F-lists (`*.f` files)
+
+  * Inline variable references are now possible using `{VAR_NAME}`
+
+  * Added `InstanceArray`
+
+  * Added the `array` attribute to a macro instance, to declare it should be expanded to
+    an array of instances; and updated the preprocessor to support this behaviour
 
 * `librelane.state`
 
