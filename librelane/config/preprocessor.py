@@ -478,7 +478,6 @@ def process_config_dict(
     updated: Mapping[str, Any] = __parse_f_list(config_in, exposed_variables)
 
     process_dict_recursive(updated, state, symbols)
-    process_dict_recursive(config_in, state, symbols)
     return state
 
 
